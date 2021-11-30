@@ -19,10 +19,13 @@ import torch.optim as optim
 from torch.utils.data import random_split
 
 from .config import Config
-from models.lstm import LSTM
+from .lstm import LSTM
 from classification.utils.utils import (
     set_seed,
     split_data_by_city_and_class
+)
+from classification.utils.load_data import (
+    load_data
 )
 
 sns.set(rc={'figure.figsize': (10, 10)})
@@ -30,7 +33,7 @@ sns.set(rc={'figure.figsize': (10, 10)})
 
 class DocumentClassification:
 
-    def __init__(self, input_data, num_classes=13, config=None, seed=42):
+    def __init__(self, input_data, config=None, seed=42):
 
         if config is not None:
             self.config = Config(**config)
