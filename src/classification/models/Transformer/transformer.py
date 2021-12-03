@@ -4,6 +4,7 @@ from typing import List
 from typing import List, Dict, Optional, Union, Tuple
 import os
 import json
+from transformers import AutoModel, AutoTokenizer, AutoConfig
 
 class Transformer(nn.Module):
     """
@@ -24,12 +25,9 @@ class Transformer(nn.Module):
         config = AutoConfig.from_pretrained(model_name_or_path, **model_args)
         self.auto_model = AutoModel.from_pretrained(model_name_or_path, config=config)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, **tokenizer_args)
-        self.classifier = nn.Linear(sentence_embedding_dimmension, num_classes)
+        self.word_embedding_dimension = config.hidden_size
 
-        # self.word_embedding_dimension = TODO
-        # self.sentence_embedding_dimension = TODO
-
-        if pooling_mode is not None:        #Set pooling mode by string
+        if pooling_mode is not None:        #Set pooling mode by sttring
             pooling_mode = pooling_mode.lower()
             assert pooling_mode in ['mean', 'max', 'cls']
             pooling_mode_cls_token = (pooling_mode == 'cls')
@@ -39,9 +37,12 @@ class Transformer(nn.Module):
         self.pooling_mode_cls_token = pooling_mode_cls_token
         self.pooling_mode_mean_tokens = pooling_mode_mean_tokens
         self.pooling_mode_max_tokens = pooling_mode_max_tokens
-        self.pooling_mode_mean_sqrt_len_tokens = pooling_mode_mean_sqrt_len_tokens
-        pooling_mode_multiplier = sum([pooling_mode_cls_token, pooling_mode_max_tokens, pooling_mode_mean_tokens, pooling_mode_mean_sqrt_len_tokens])
-        self.pooling_output_dimension = (pooling_mode_multiplier * word_embedding_dimension)
+        # self.pooling_mode_mean_sqrt_len_tokens = pooling_mode_mean_sqrt_len_tokens
+        pooling_mode_multiplier = sum([pooling_mode_cls_token, pooling_mode_max_tokens, pooling_mode_mean_tokens])
+        self.pooling_output_dimension = (pooling_mode_multiplier * self.word_embedding_dimension)
+        self.sentence_embedding_dimension = self.pooling_output_dimension
+        self.classifier = nn.Linear(self.sentence_embedding_dimension, num_classes)
+
 
     def forward(self, features):
 

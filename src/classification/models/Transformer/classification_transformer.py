@@ -25,7 +25,7 @@ from classification.utils.utils import (
     split_data_by_city_and_class
 )
 from classification.utils.load_data import (
-    load_data
+    load_text_data
 )
 
 sns.set(rc={'figure.figsize': (10, 10)})
@@ -33,59 +33,32 @@ sns.set(rc={'figure.figsize': (10, 10)})
 
 class DocumentClassification:
 
-    def __init__(self, input_data, config=None, seed=42):
+    def __init__(self, input_data, config=None, seed=42, device=None):
 
         if config is not None:
             self.config = Config(**config)
         else:
             self.config = Config()
 
+        if device is not None:
+            self.device = device
+        elif torch.cuda.is_available():
+            device = "cuda:0"
+        else:
+            device = "cpu"
+
         self.seed = seed
         set_seed(self.seed)
 
-        df_data = pd.read_csv(input_data)
-        labels_dict = dict(df_data[['label_int', 'label']].drop_duplicates().values)
-        self.df_data = split_data_by_city_and_class(df_data)
+        self.df_data = input_data
         self.config.num_classes = self.df_data['label'].nunique()
         self.data_loaders = self.data_load()
         self.best_model = None
 
-    def train_eval_model(self):
-
-        best_model = train_model()
-        data_loaders = self.data_loaders
-
-        device = "cpu"
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        best_model.to(device)
-
-        print("="*20, "BEST MODEL", "="*20)
-        train_df, train_metrics = eval_model(data_loaders["train"], fold="train",
-                                             labels_dict=labels_dict, device=device,
-                                             probability=True)
-        print("Train:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f" % (
-            train_metrics[0], train_metrics[1], train_metrics[2], train_metrics[3]))
-
-        val_df, val_metrics = eval_model(data_loaders["val"], fold="val",
-                                        labels_dict=labels_dict, device=device,
-                                        probability=True)
-        print("Val:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f" % (
-            val_metrics[0], val_metrics[1], val_metrics[2], val_metrics[3]))
-
-        test_df, test_metrics = eval_model(best_model, data_loaders["test"],
-                                          fold="test", labels_dict=labels_dict,
-                                          device=device, probability=True)
-        print("Test:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f" % (
-            test_metrics[0], test_metrics[1], test_metrics[2], test_metrics[3]))
-
-        results_df = pd.concat([train_df, val_df, test_df], ignore_index=True, sort=False)
-        results_df.to_csv(f"./transformer_data/results/setup_sandbox/setup_1-2_stacking.csv")
-
     def split_data(self, fold):
         df_data = self.df_data
         X = df_data.loc[df_data['fold'] == fold, [
-            "city", "doc_id", "four_pages_encoded"]].values
+            "city", "doc_id", "four_pages_processed"]].values
         y = df_data.loc[df_data['fold'] == fold, 'label_int'].values
 
         return X, y
@@ -100,14 +73,14 @@ class DocumentClassification:
     def data_load(self):
 
         # Split data
-        X_train, y_train = split_data("train")
-        X_val, y_val = split_data("val")
-        X_test, y_test = split_data("test")
+        X_train, y_train = self.split_data("train")
+        X_val, y_val = self.split_data("val")
+        X_test, y_test = self.split_data("test")
 
         # Load dataset
-        train_set = load_data(X_train, y_train)
-        val_set = load_data(X_val, y_val)
-        test_set = load_data(X_test, y_test)
+        train_set = load_text_data(X_train, y_train)
+        val_set = load_text_data(X_val, y_val)
+        test_set = load_text_data(X_test, y_test)
 
         data_loaders = dict()
 
@@ -151,12 +124,9 @@ class DocumentClassification:
             pooling_mode = self.config.pooling_mode
         )
 
-        device = "cpu"
-        if torch.cuda.is_available():
-            device = "cuda:0"
-        model.to(device)
+        model.to(self.device)
 
-        best_model = copy.deepcopy(model)
+        best_model = model
         best_loss = float("inf")
         #best_macro = 0.0
 
@@ -179,8 +149,9 @@ class DocumentClassification:
             y_true = []
             for i, data in enumerate(train_loader, 0):
                 # get the inputs; data is a list of [inputs, labels]
+                print(data)
                 inputs, labels, sentence_length, _, _ = data
-                inputs, labels = inputs.long().to(device), labels.long().to(device)
+                inputs, labels = inputs.to(self.device), labels.long().to(self.device)
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
@@ -207,19 +178,17 @@ class DocumentClassification:
                 train_metrics[0], train_metrics[1], train_metrics[2], train_metrics[3]))
 
             _, val_metrics = eval_model(
-                model, val_loader, device=device, probability=True)
+                model, val_loader, device=self.device, probability=True)
             print("Val:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f \n" % (
                 val_metrics[0], val_metrics[1], val_metrics[2], val_metrics[3]))
 
-            # if val_metrics[2] > best_macro:
             if val_metrics[0] < best_loss - 0.001:
                 best_loss = val_metrics[0]
                 best_model = copy.deepcopy(model)
                 best_macro = val_metrics[2]
                 patience_counter = 0
-                # AMANDA
-                path = os.path.join(checkpoint_dir, "model_setup_1-2.pth")
-                torch.save((model.state_dict(), optimizer.state_dict()), path)
+                # path = os.path.join(checkpoint_dir, "model_setup_1-2.pth")
+                # torch.save((model.state_dict(), optimizer.state_dict()), path)
             else:
                 patience_counter += 1
                 if patience_counter >= self.config.patience:
@@ -230,8 +199,7 @@ class DocumentClassification:
         print("Finished Training")
         return best_model
 
-    def eval_model(self, loader, fold=None, labels_dict=None, device="cpu",
-                   probability=False):
+    def eval_model(self, loader, fold=None, labels_dict=None, probability=False):
 
         model = self.best_model
         model.eval()
@@ -246,14 +214,13 @@ class DocumentClassification:
         probabilities = []
         with torch.no_grad():
             for data in loader:
-                # AMANDA
                 if fold:
                     inputs, labels, sentence_length, city, doc_id = data
                     cities.extend(city)
                     docs.extend(doc_id)
                 else:
                     inputs, labels, sentence_length, _, _ = data
-                inputs, labels = inputs.long().to(device), labels.long().to(device)
+                inputs, labels = inputs.to(self.device), labels.long().to(self.device)
                 outputs = model(inputs, sentence_length)
                 loss = criterion(outputs, labels)
                 _, predicted = torch.max(outputs.data, 1)

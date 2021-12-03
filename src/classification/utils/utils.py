@@ -21,6 +21,7 @@ import torch.optim as optim
 from wordcloud import WordCloud
 from tqdm.notebook import tqdm
 import spacy
+from .input_example import InputExample
 
 
 def split_stratified_into_train_val_test(df_input, stratify_colname='label',
@@ -190,7 +191,7 @@ def plot_confusion_matrix(y_pred, y_true, fold, labels_dict):
     plt.show()
 
 
-def set_seed(self, seed):
+def set_seed(seed):
     """
     Fixa semente aleatória para garantir que os resultados possam ser reproduzidos
     """

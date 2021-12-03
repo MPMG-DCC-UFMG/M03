@@ -6,8 +6,7 @@ class Config:
     def __init__(self, model_name_or_path="neuralmind/bert-base-portuguese-cased",
                  max_seq_length=1000, num_classes=13, model_args={}, tokenizer_args={},
                  do_lower_case=False, pooling_mode=None, lr=0.001, batch_size=24,
-                 num_epochs=10, num_classes=None, patience=5,
-                 artifacts_path='../data/output/'):
+                 num_epochs=10, patience=5, artifacts_path='../data/output/'):
 
         self.model_name_or_path = model_name_or_path
         self.max_seq_length = max_seq_length
