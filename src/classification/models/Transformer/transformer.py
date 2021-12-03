@@ -10,14 +10,18 @@ class Transformer(nn.Module):
     """
     Bidirectional Encoder Representations from Transformers.
     """
-    def __init__(self, model_name_or_path: str, max_seq_length: Optional[int] = None,
-                 num_classes: int = 13, model_args: Dict = {}, tokenizer_args: Dict = {}, do_lower_case: bool = False,
-                 pooling_mode: str = None, pooling_mode_cls_token: bool = False, pooling_mode_max_tokens: bool = False,
+    def __init__(self, model_name_or_path: str,
+                 max_seq_length: Optional[int] = None, num_classes: int = 13,
+                 model_args: Dict = {}, tokenizer_args: Dict = {},
+                 do_lower_case: bool = False, pooling_mode: str = None,
+                 pooling_mode_cls_token: bool = False, pooling_mode_max_tokens: bool = False,
                  pooling_mode_mean_tokens: bool = True):
 
         super(Transformer, self).__init__()
 
-        self.config_keys = ['max_seq_length', 'do_lower_case', 'pooling_mode_cls_token', 'pooling_mode_mean_tokens', 'pooling_mode_max_tokens', 'pooling_mode_mean_sqrt_len_tokens']
+        self.config_keys = ['max_seq_length', 'do_lower_case', \
+                            'pooling_mode_cls_token', 'pooling_mode_mean_tokens', \
+                            'pooling_mode_max_tokens', 'pooling_mode_mean_sqrt_len_tokens']
 
         self.max_seq_length = max_seq_length
         self.do_lower_case = do_lower_case
@@ -46,8 +50,8 @@ class Transformer(nn.Module):
 
     def forward(self, features):
 
-        features = [self.get_features(document_feature) for document_feature in features]
-        features = [self.pooling(document_feature) for document_feature in features]
+        features = self.get_features(features)
+        features = self.pooling(features)
         output = self.classifier(features)
 
         return output

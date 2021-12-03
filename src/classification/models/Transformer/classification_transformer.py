@@ -1,7 +1,6 @@
 from collections import Counter
 from functools import partial
 import copy
-
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -11,6 +10,7 @@ from sklearn.metrics import f1_score, accuracy_score, confusion_matrix
 from sklearn.model_selection import train_test_split
 import spacy
 import seaborn as sns
+from tqdm.autonotebook import trange
 
 import torch
 import torch.nn as nn
@@ -50,18 +50,53 @@ class DocumentClassification:
         self.seed = seed
         set_seed(self.seed)
 
-        self.df_data = input_data
-        self.config.num_classes = self.df_data['label'].nunique()
-        self.data_loaders = self.data_load()
+        self.config.num_classes = input_data['label'].nunique()
         self.best_model = None
+
+        self.model = Transformer(
+            model_name_or_path = self.config.model_name_or_path,
+            max_seq_length = self.config.max_seq_length,
+            num_classes = self.config.num_classes,
+            model_args = self.config.model_args,
+            tokenizer_args = self.config.tokenizer_args,
+            do_lower_case = self.config.do_lower_case,
+            pooling_mode = self.config.pooling_mode
+        )
+
+        self.encode_data(input_data)
+        self.data_loaders = self.data_load()
+
+    def encode_sentence(self, text):
+
+        tokenized = self.model.tokenize(text)
+        tokenized['input_ids'] = torch.Tensor(tokenized['input_ids'].tolist()[0])
+        tokenized['token_type_ids'] = torch.Tensor(tokenized['token_type_ids'].tolist()[0])
+        tokenized['attention_mask'] = torch.Tensor(tokenized['attention_mask'].tolist()[0])
+        return tokenized
 
     def split_data(self, fold):
         df_data = self.df_data
         X = df_data.loc[df_data['fold'] == fold, [
-            "city", "doc_id", "four_pages_processed"]].values
+            "city", "doc_id", "four_pages_encoded"]].values
         y = df_data.loc[df_data['fold'] == fold, 'label_int'].values
 
         return X, y
+
+    def encode_data(self, df_data):
+
+        # encoding
+        df_data['four_pages_encoded'] = None
+        df_data.loc[df_data['fold'] == 'train', 'four_pages_encoded'] = \
+            df_data.loc[df_data['fold'] == 'train', 'four_pages_processed'].apply(
+                lambda x: np.array(self.encode_sentence(x)))
+        df_data.loc[df_data['fold'] == 'val', 'four_pages_encoded'] = \
+            df_data.loc[df_data['fold'] == 'val', 'four_pages_processed'].apply(
+                lambda x: np.array(self.encode_sentence(x)))
+        df_data.loc[df_data['fold'] == 'test', 'four_pages_encoded'] = \
+            df_data.loc[df_data['fold'] == 'test', 'four_pages_processed'].apply(
+                lambda x: np.array(self.encode_sentence(x)))
+
+        self.df_data = df_data
 
     def calculate_metrics(self, y_true, y_pred):
         f1_macro = f1_score(y_true, y_pred, average='macro')
@@ -102,7 +137,7 @@ class DocumentClassification:
 
         return data_loaders
 
-    def train_model(self):
+    def train_model(self, show_progress_bar=True):
 
         checkpoint_dir = self.config.artifacts_path
         data_loaders = self.data_loaders
@@ -114,24 +149,14 @@ class DocumentClassification:
         train_loader = data_loaders["train"]
         val_loader = data_loaders["val"]
 
-        model = Transformer(
-            model_name_or_path = self.config.model_name_or_path,
-            max_seq_length = self.config.max_seq_length,
-            num_classes = self.config.num_classes,
-            model_args = self.config.model_args,
-            tokenizer_args = self.config.tokenizer_args,
-            do_lower_case = self.config.do_lower_case,
-            pooling_mode = self.config.pooling_mode
-        )
+        self.model.to(self.device)
 
-        model.to(self.device)
-
-        best_model = model
+        self.best_model = self.model
         best_loss = float("inf")
         #best_macro = 0.0
 
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=self.config.lr)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.config.lr)
 
         """if checkpoint_dir:
             model_state, optimizer_state = torch.load(
@@ -139,25 +164,30 @@ class DocumentClassification:
             model.load_state_dict(model_state)
             optimizer.load_state_dict(optimizer_state)"""
 
+        steps_per_epoch = len(train_loader)
+        data_iterator = iter(train_loader)
         # loop over the dataset multiple times
-        for epoch in range(self.config.num_epochs):
+        for epoch in trange(self.config.num_epochs, desc="Epoch", disable=not show_progress_bar):
             print("=" * 20, "Epoch: {}".format(epoch + 1), "=" * 20)
-            model.train()
+            self.model.train()
             training_loss = 0.0
             epoch_steps = 0
             y_pred = []
             y_true = []
-            for i, data in enumerate(train_loader, 0):
+            for i in trange(steps_per_epoch, desc="Iteration", smoothing=0.05, disable=not show_progress_bar):
+                data = next(data_iterator)
                 # get the inputs; data is a list of [inputs, labels]
-                print(data)
-                inputs, labels, sentence_length, _, _ = data
-                inputs, labels = inputs.to(self.device), labels.long().to(self.device)
+                inputs, labels, _, _ = data
+                labels = labels.long().to(self.device)
+                inputs['input_ids'] = inputs['input_ids'].to(self.device)
+                inputs['token_type_ids'] = inputs['token_type_ids'].to(self.device)
+                inputs['attention_mask'] = inputs['attention_mask'].to(self.device)
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
 
                 # forward + backward + optimize
-                outputs = model(inputs, sentence_length)
+                outputs = self.model(inputs)
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
@@ -178,13 +208,13 @@ class DocumentClassification:
                 train_metrics[0], train_metrics[1], train_metrics[2], train_metrics[3]))
 
             _, val_metrics = eval_model(
-                model, val_loader, device=self.device, probability=True)
+                self.model, val_loader, device=self.device, probability=True)
             print("Val:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f \n" % (
                 val_metrics[0], val_metrics[1], val_metrics[2], val_metrics[3]))
 
             if val_metrics[0] < best_loss - 0.001:
                 best_loss = val_metrics[0]
-                best_model = copy.deepcopy(model)
+                best_model = copy.deepcopy(self.model)
                 best_macro = val_metrics[2]
                 patience_counter = 0
                 # path = os.path.join(checkpoint_dir, "model_setup_1-2.pth")
@@ -201,8 +231,8 @@ class DocumentClassification:
 
     def eval_model(self, loader, fold=None, labels_dict=None, probability=False):
 
-        model = self.best_model
-        model.eval()
+        self.model = self.best_model
+        self.model.eval()
         criterion = nn.CrossEntropyLoss()
 
         steps = 0
@@ -215,13 +245,13 @@ class DocumentClassification:
         with torch.no_grad():
             for data in loader:
                 if fold:
-                    inputs, labels, sentence_length, city, doc_id = data
+                    inputs, labels, city, doc_id = data
                     cities.extend(city)
                     docs.extend(doc_id)
                 else:
-                    inputs, labels, sentence_length, _, _ = data
-                inputs, labels = inputs.to(self.device), labels.long().to(self.device)
-                outputs = model(inputs, sentence_length)
+                    inputs, labels, _, _ = data
+                inputs, labels = inputs, labels.long().to(self.device)
+                outputs = self.model(inputs)
                 loss = criterion(outputs, labels)
                 _, predicted = torch.max(outputs.data, 1)
 

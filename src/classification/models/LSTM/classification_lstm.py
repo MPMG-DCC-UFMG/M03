@@ -57,8 +57,19 @@ class DocumentClassification:
         self.config.num_classes = self.df_data['label'].nunique()
 
         self.data_loaders = self.data_load()
-        self.embedding_matrix = self.create_embedding_matrix()
         self.best_model = None
+        self.embedding_matrix = self.create_embedding_matrix()
+
+        self.model = LSTM(
+            embedding_matrix=self.embedding_matrix,
+            word_embedding_dimension=self.config.embedding_dim,
+            hidden_dim=self.config.embedding_dim,
+            num_classes=self.config.num_classes,
+            vocab_size=self.config.vocab_size,
+            num_layers=self.config.num_layers,
+            dropout=self.config.dropout,
+            bidirectional=True
+        )
 
     def train_eval_model(self, output_file, labels_dict, probability=True):
 
@@ -186,7 +197,6 @@ class DocumentClassification:
 
         checkpoint_dir = self.config.artifacts_path
         data_loaders = self.data_loaders
-        embedding_matrix = self.embedding_matrix
 
         if not self.config.patience:
             self.config.patience = self.config.num_epochs
@@ -195,25 +205,14 @@ class DocumentClassification:
         train_loader = data_loaders["train"]
         val_loader = data_loaders["val"]
 
-        model = LSTM(
-            embedding_matrix=embedding_matrix,
-            word_embedding_dimension=self.config.embedding_dim,
-            hidden_dim=self.config.embedding_dim,
-            num_classes=self.config.num_classes,
-            vocab_size=self.config.vocab_size,
-            num_layers=self.config.num_layers,
-            dropout=self.config.dropout,
-            bidirectional=True
-        )
+        self.model.to(self.device)
 
-        model.to(self.device)
-
-        best_model = copy.deepcopy(model)
+        best_model = copy.deepcopy(self.model)
         best_loss = float("inf")
         #best_macro = 0.0
 
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=self.config.lr)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.config.lr)
 
         """if checkpoint_dir:
             model_state, optimizer_state = torch.load(
@@ -224,7 +223,7 @@ class DocumentClassification:
         steps_per_epoch = len(train_loader)
         # loop over the dataset multiple times
         for epoch in trange(self.config.num_epochs, desc="Epoch", disable=not show_progress_bar):
-            model.train()
+            self.model.train()
             training_loss = 0.0
             epoch_steps = 0
             y_pred = []
@@ -239,7 +238,7 @@ class DocumentClassification:
                 optimizer.zero_grad()
 
                 # forward + backward + optimize
-                outputs = model(inputs, sentence_length)
+                outputs = self.model(inputs, sentence_length)
                 loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
@@ -259,14 +258,14 @@ class DocumentClassification:
             print("Train:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f" % (
                 train_metrics[0], train_metrics[1], train_metrics[2], train_metrics[3]))
 
-            _, val_metrics = eval_model(model, val_loader, device=self.device,
+            _, val_metrics = eval_model(self.model, val_loader, device=self.device,
                                         probability=True)
             print("Val:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f \n" % (
                 val_metrics[0], val_metrics[1], val_metrics[2], val_metrics[3]))
 
             if val_metrics[0] < best_loss - 0.001:
                 best_loss = val_metrics[0]
-                best_model = copy.deepcopy(model)
+                best_model = copy.deepcopy(self.model)
                 best_macro = val_metrics[2]
                 patience_counter = 0
                 # path = os.path.join(checkpoint_dir, "model_setup_1-2.pth")
@@ -283,8 +282,8 @@ class DocumentClassification:
 
     def eval_model(self, fold='train', labels_dict=None, probability=False):
 
-        model = self.best_model
-        model.eval()
+        self.model = self.best_model
+        self.model.eval()
         criterion = nn.CrossEntropyLoss()
 
         loader = self.data_loaders[fold]
@@ -305,7 +304,7 @@ class DocumentClassification:
                 else:
                     inputs, labels, sentence_length, _, _ = data
                 inputs, labels = inputs.long().to(self.device), labels.long().to(self.device)
-                outputs = model(inputs, sentence_length)
+                outputs = self.model(inputs, sentence_length)
                 loss = criterion(outputs, labels)
                 _, predicted = torch.max(outputs.data, 1)
 

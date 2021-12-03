@@ -29,8 +29,5 @@ class load_text_data(torch.utils.data.Dataset):
         return len(self.y)
 
     def __getitem__(self, idx):
-        # document, label, document length, city, doc_id
-        # return self.X[idx], self.y[idx], self.X[idx][-1][1], self.X[idx][0], self.X[idx][1]
-        print(self.X[idx])
-        print(self.y[idx])
-        return self.y[idx], self.X[idx][-1][1], self.X[idx][0], self.X[idx][1]
+        # document, label, city, doc_id
+        return self.X[idx][-1], self.y[idx], self.X[idx][0], self.X[idx][1]
