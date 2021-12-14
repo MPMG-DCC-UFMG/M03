@@ -174,7 +174,13 @@ class DocumentClassification:
             y_pred = []
             y_true = []
             for i in trange(steps_per_epoch, desc="Iteration", smoothing=0.05, disable=not show_progress_bar):
-                data = next(data_iterator)
+
+                try:
+                    data = next(data_iterator)
+                except StopIteration:
+                    data_iterator = iter(train_loader)
+                    data = next(data_iterator)
+
                 # get the inputs; data is a list of [inputs, labels]
                 inputs, labels, _, _ = data
                 labels = labels.long().to(self.device)

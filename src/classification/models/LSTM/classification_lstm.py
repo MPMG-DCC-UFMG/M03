@@ -218,6 +218,7 @@ class DocumentClassification:
             optimizer.load_state_dict(optimizer_state)"""
 
         steps_per_epoch = len(train_loader)
+        data_iterator = iter(train_loader)
         # loop over the dataset multiple times
         for epoch in trange(self.config.num_epochs, desc="Epoch", disable=not show_progress_bar):
             self.model.train()
@@ -225,8 +226,14 @@ class DocumentClassification:
             epoch_steps = 0
             y_pred = []
             y_true = []
-            for i in trange(steps_per_epoch, desc="Iteration", smoothing=0.05, disable=not show_progress_bar):
-                data = list(train_loader)[i]
+            for i in trange(steps_per_epoch, desc="Iteration", smoothing=0.05, disable=not show_progress_bar):]
+
+                try:
+                    data = next(data_iterator)
+                except StopIteration:
+                    data_iterator = iter(train_loader)
+                    data = next(data_iterator)
+
                 # get the inputs; data is a list of [inputs, labels]
                 inputs, labels, sentence_length, _, _ = data
                 inputs, labels = inputs.long().to(self.device), labels.long().to(self.device)
