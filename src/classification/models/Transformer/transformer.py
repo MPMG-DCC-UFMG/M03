@@ -136,7 +136,7 @@ class Transformer(nn.Module):
         #strip
         to_tokenize = [[s.strip() for s in col] for col in to_tokenize]
 
-        output.update(self.tokenizer(*to_tokenize, padding=True, truncation='longest_first', return_tensors="pt", max_length=self.max_seq_length))
+        output.update(self.tokenizer(*to_tokenize, padding='max_length', truncation='longest_first', return_tensors="pt", max_length=self.max_seq_length))
         return output
 
     def get_sentence_embedding_dimension(self):
