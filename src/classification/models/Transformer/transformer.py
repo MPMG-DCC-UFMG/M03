@@ -56,9 +56,8 @@ class Transformer(nn.Module):
     def forward(self, features):
 
         features = self.get_features(features)
-        features = self.pooling(features)
-        # pooled_output = self.dropout(output)
-        output = self.classifier(features['sentence_embedding'])
+        pooled_output = self.dropout(features['all_layer_embeddings'])
+        output = self.classifier(pooled_output)
 
         return output
 
@@ -109,13 +108,9 @@ class Transformer(nn.Module):
         cls_tokens = output_tokens[:, 0, :]  # CLS token is first token
         features.update({'token_embeddings': output_tokens, 'cls_token_embeddings': cls_tokens, 'attention_mask': features['attention_mask']})
 
-        if self.auto_model.config.output_hidden_states:
-            all_layer_idx = 2
-            if len(output_states) < 3: #Some models only output last_hidden_states and all_hidden_states
-                all_layer_idx = 1
-
-            hidden_states = output_states[all_layer_idx]
-            features.update({'all_layer_embeddings': hidden_states})
+        all_layer_idx = 1
+        hidden_states = output_states[all_layer_idx]
+        features.update({'all_layer_embeddings': hidden_states})
 
         return features
 
