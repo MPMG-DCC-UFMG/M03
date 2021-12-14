@@ -14,8 +14,10 @@ class Transformer(nn.Module):
                  max_seq_length: Optional[int] = None, num_classes: int = 13,
                  model_args: Dict = {}, tokenizer_args: Dict = {},
                  do_lower_case: bool = False, pooling_mode: str = None,
-                 pooling_mode_cls_token: bool = False, pooling_mode_max_tokens: bool = False,
-                 pooling_mode_mean_tokens: bool = True):
+                 pooling_mode_cls_token: bool = False,
+                 pooling_mode_max_tokens: bool = False,
+                 pooling_mode_mean_tokens: bool = True,
+                 pooling_mode_mean_sqrt_len_tokens: bool = False):
 
         super(Transformer, self).__init__()
 
@@ -41,10 +43,13 @@ class Transformer(nn.Module):
         self.pooling_mode_cls_token = pooling_mode_cls_token
         self.pooling_mode_mean_tokens = pooling_mode_mean_tokens
         self.pooling_mode_max_tokens = pooling_mode_max_tokens
-        # self.pooling_mode_mean_sqrt_len_tokens = pooling_mode_mean_sqrt_len_tokens
-        pooling_mode_multiplier = sum([pooling_mode_cls_token, pooling_mode_max_tokens, pooling_mode_mean_tokens])
+        self.pooling_mode_mean_sqrt_len_tokens = pooling_mode_mean_sqrt_len_tokens
+        pooling_mode_multiplier = sum([pooling_mode_cls_token, pooling_mode_max_tokens,
+                                       pooling_mode_mean_tokens, pooling_mode_mean_sqrt_len_tokens])
         self.pooling_output_dimension = (pooling_mode_multiplier * self.word_embedding_dimension)
         self.sentence_embedding_dimension = self.pooling_output_dimension
+
+        self.dropout = nn.Dropout()
         self.classifier = nn.Linear(self.sentence_embedding_dimension, num_classes)
 
 
@@ -52,7 +57,8 @@ class Transformer(nn.Module):
 
         features = self.get_features(features)
         features = self.pooling(features)
-        output = self.classifier(features)
+        # pooled_output = self.dropout(output)
+        output = self.classifier(features['sentence_embedding'])
 
         return output
 

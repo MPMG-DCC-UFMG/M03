@@ -27,6 +27,9 @@ from classification.utils.utils import (
 from classification.utils.load_data import (
     load_text_data
 )
+from classification.evaluate.evaluate import (
+    calculate_metrics
+)
 
 sns.set(rc={'figure.figsize': (10, 10)})
 
@@ -63,12 +66,15 @@ class DocumentClassification:
             pooling_mode = self.config.pooling_mode
         )
 
+        print("Encoding data...")
         self.encode_data(input_data)
+
+        print("Creating data loaders...")
         self.data_loaders = self.data_load()
 
     def encode_sentence(self, text):
 
-        tokenized = self.model.tokenize(text)
+        tokenized = self.model.tokenize([text])
         tokenized['input_ids'] = torch.Tensor(tokenized['input_ids'].tolist()[0])
         tokenized['token_type_ids'] = torch.Tensor(tokenized['token_type_ids'].tolist()[0])
         tokenized['attention_mask'] = torch.Tensor(tokenized['attention_mask'].tolist()[0])
@@ -97,13 +103,6 @@ class DocumentClassification:
                 lambda x: np.array(self.encode_sentence(x)))
 
         self.df_data = df_data
-
-    def calculate_metrics(self, y_true, y_pred):
-        f1_macro = f1_score(y_true, y_pred, average='macro')
-        f1_weighted = f1_score(y_true, y_pred, average='weighted')
-        acc = accuracy_score(y_true, y_pred)
-
-        return acc, f1_macro, f1_weighted
 
     def data_load(self):
 
@@ -179,13 +178,12 @@ class DocumentClassification:
                 # get the inputs; data is a list of [inputs, labels]
                 inputs, labels, _, _ = data
                 labels = labels.long().to(self.device)
-                inputs['input_ids'] = inputs['input_ids'].to(self.device)
-                inputs['token_type_ids'] = inputs['token_type_ids'].to(self.device)
-                inputs['attention_mask'] = inputs['attention_mask'].to(self.device)
+                inputs['input_ids'] = inputs['input_ids'].long().to(self.device)
+                inputs['token_type_ids'] = inputs['token_type_ids'].long().to(self.device)
+                inputs['attention_mask'] = inputs['attention_mask'].long().to(self.device)
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
-
                 # forward + backward + optimize
                 outputs = self.model(inputs)
                 loss = criterion(outputs, labels)
@@ -207,8 +205,7 @@ class DocumentClassification:
             print("Train:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f" % (
                 train_metrics[0], train_metrics[1], train_metrics[2], train_metrics[3]))
 
-            _, val_metrics = eval_model(
-                self.model, val_loader, device=self.device, probability=True)
+            _, val_metrics = self.eval_model(self.model, "val", probability=True)
             print("Val:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f \n" % (
                 val_metrics[0], val_metrics[1], val_metrics[2], val_metrics[3]))
 
@@ -229,12 +226,14 @@ class DocumentClassification:
         print("Finished Training")
         return best_model
 
-    def eval_model(self, loader, fold=None, labels_dict=None, probability=False):
+    def eval_model(self, model=None, fold=None, labels_dict=None, probability=False):
 
-        self.model = self.best_model
+        if model is None:
+            self.model = self.best_model
         self.model.eval()
         criterion = nn.CrossEntropyLoss()
 
+        loader = self.data_loaders[fold]
         steps = 0
         sum_loss = 0.0
         y_true = []
@@ -251,6 +250,9 @@ class DocumentClassification:
                 else:
                     inputs, labels, _, _ = data
                 inputs, labels = inputs, labels.long().to(self.device)
+                inputs['input_ids'] = inputs['input_ids'].long().to(self.device)
+                inputs['token_type_ids'] = inputs['token_type_ids'].long().to(self.device)
+                inputs['attention_mask'] = inputs['attention_mask'].long().to(self.device)
                 outputs = self.model(inputs)
                 loss = criterion(outputs, labels)
                 _, predicted = torch.max(outputs.data, 1)
@@ -279,8 +281,7 @@ class DocumentClassification:
                 df_predictions = pd.DataFrame(
                     {"doc_id": docs, "city": cities, "label": y_true, "pred": y_pred})
                 df_predictions['fold'] = fold
-            df_predictions.to_csv(
-                "./transformer_data/results/setup_1-2/setup_1-2_{}.csv".format(fold, index=False))
+            # df_predictions.to_csv("./transformer_data/results/setup_1-2/setup_1-2_{}.csv".format(fold, index=False))
             # Plot confusion matrix
-            plot_confusion_matrix(y_pred, y_true, fold, labels_dict)
+            # plot_confusion_matrix(y_pred, y_true, fold, labels_dict)
         return df_predictions, metrics

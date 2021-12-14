@@ -27,6 +27,9 @@ from classification.utils.utils import (
 from classification.utils.load_data import (
     load_data
 )
+from classification.evaluate.evaluate import (
+    calculate_metrics
+)
 
 sns.set(rc={'figure.figsize': (10, 10)})
 
@@ -154,12 +157,6 @@ class DocumentClassification:
 
         self.df_data = df_data
 
-    def calculate_metrics(self, y_true, y_pred):
-        f1_macro = f1_score(y_true, y_pred, average='macro')
-        f1_weighted = f1_score(y_true, y_pred, average='weighted')
-        acc = accuracy_score(y_true, y_pred)
-
-        return acc, f1_macro, f1_weighted
 
     def data_load(self):
 
@@ -258,8 +255,7 @@ class DocumentClassification:
             print("Train:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f" % (
                 train_metrics[0], train_metrics[1], train_metrics[2], train_metrics[3]))
 
-            _, val_metrics = eval_model(self.model, val_loader, device=self.device,
-                                        probability=True)
+            _, val_metrics = self.eval_model(self.model, "val", probability=True)
             print("Val:\n loss %.3f, accuracy %.3f, F1-Macro %.3f, F1-Weighted %.3f \n" % (
                 val_metrics[0], val_metrics[1], val_metrics[2], val_metrics[3]))
 
@@ -280,9 +276,10 @@ class DocumentClassification:
         print("Finished Training")
         return best_model
 
-    def eval_model(self, fold='train', labels_dict=None, probability=False):
+    def eval_model(self, model=None, fold='train', labels_dict=None, probability=False):
 
-        self.model = self.best_model
+        if model is None:
+            self.model = self.best_model
         self.model.eval()
         criterion = nn.CrossEntropyLoss()
 
@@ -296,7 +293,6 @@ class DocumentClassification:
         probabilities = []
         with torch.no_grad():
             for data in loader:
-                # AMANDA
                 if fold:
                     inputs, labels, sentence_length, city, doc_id = data
                     cities.extend(city)
@@ -332,10 +328,9 @@ class DocumentClassification:
                 df_predictions = pd.DataFrame(
                     {"doc_id": docs, "city": cities, "label": y_true, "pred": y_pred})
                 df_predictions['fold'] = fold
-            df_predictions.to_csv(
-                "./lstm_data/results/setup_1-2/setup_1-2_{}.csv".format(fold, index=False))
+            # df_predictions.to_csv("./lstm_data/results/setup_1-2/setup_1-2_{}.csv".format(fold, index=False))
             # Plot confusion matrix
-            plot_confusion_matrix(y_pred, y_true, fold, labels_dict)
+            # plot_confusion_matrix(y_pred, y_true, fold, labels_dict)
         return df_predictions, metrics
 
     def create_embedding_matrix(self):

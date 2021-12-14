@@ -13,6 +13,13 @@ from sklearn.metrics import confusion_matrix, plot_confusion_matrix
 from sklearn.metrics import f1_score, accuracy_score, classification_report
 from tqdm.notebook import tqdm
 
+def calculate_metrics(y_true, y_pred):
+    f1_macro = f1_score(y_true, y_pred, average='macro')
+    f1_weighted = f1_score(y_true, y_pred, average='weighted')
+    acc = accuracy_score(y_true, y_pred)
+
+    return acc, f1_macro, f1_weighted
+
 
 def create_res_diresctory(setup='teste'):
     # Directory
