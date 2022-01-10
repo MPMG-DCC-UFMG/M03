@@ -115,7 +115,7 @@ def split_data_by_city_and_class(df):
         df.loc[df["fold"] == "train", "multi_label"],
         stratify=df.loc[df["fold"] == "train", "multi_label"],
         test_size=test_size,
-        random_state=SEED)
+        random_state=42)
     # define os docs que vão pra validação
     df.loc[test.index, "fold"] = "test"
 
@@ -125,7 +125,7 @@ def split_data_by_city_and_class(df):
         df.loc[df["fold"] == "train", "multi_label"],
         stratify=df.loc[df["fold"] == "train", "multi_label"],
         test_size=val_size,
-        random_state=SEED)
+        random_state=42)
     # define os docs que vão pra validação
     df.loc[val.index, "fold"] = "val"
 

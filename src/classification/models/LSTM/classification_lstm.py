@@ -226,7 +226,7 @@ class DocumentClassification:
             epoch_steps = 0
             y_pred = []
             y_true = []
-            for i in trange(steps_per_epoch, desc="Iteration", smoothing=0.05, disable=not show_progress_bar):]
+            for i in trange(steps_per_epoch, desc="Iteration", smoothing=0.05, disable=not show_progress_bar):
 
                 try:
                     data = next(data_iterator)
