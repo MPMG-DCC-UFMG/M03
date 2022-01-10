@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import random
 from sklearn.model_selection import train_test_split
 
 from sklearn.metrics import confusion_matrix
@@ -21,7 +22,6 @@ import torch.optim as optim
 from wordcloud import WordCloud
 from tqdm.notebook import tqdm
 import spacy
-from .input_example import InputExample
 
 
 def split_stratified_into_train_val_test(df_input, stratify_colname='label',
