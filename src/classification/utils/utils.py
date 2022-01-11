@@ -22,6 +22,25 @@ import torch.optim as optim
 from wordcloud import WordCloud
 from tqdm.notebook import tqdm
 import spacy
+import wandb
+
+
+def save_results_in_wandb(train_metrics, val_metrics, best_loss, best_macro):
+
+    wandb.log((
+        {
+          "train_loss": train_metrics[0],
+          "val_loss": val_metrics[0],
+          "train_accuracy": train_metrics[1],
+          "val_accuracy": val_metrics[1],
+          "train_macro": train_metrics[2],
+          "val_macro": val_metrics[2],
+          "train_weighted": train_metrics[3],
+          "train_weighted": val_metrics[3],
+          "best_loss": best_loss,
+          "best_macro": best_macro
+        })
+    )
 
 
 def split_stratified_into_train_val_test(df_input, stratify_colname='label',

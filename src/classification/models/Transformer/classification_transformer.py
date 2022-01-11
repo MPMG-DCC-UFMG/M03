@@ -22,7 +22,8 @@ from .config import Config
 from .transformer import Transformer
 from classification.utils.utils import (
     set_seed,
-    split_data_by_city_and_class
+    split_data_by_city_and_class,
+    save_results_in_wandb
 )
 from classification.utils.load_data import (
     load_text_data
@@ -136,7 +137,7 @@ class DocumentClassification:
 
         return data_loaders
 
-    def train_model(self, show_progress_bar=True):
+    def train_model(self, show_progress_bar=True, log_results=False):
 
         checkpoint_dir = self.config.artifacts_path
         data_loaders = self.data_loaders
@@ -152,7 +153,7 @@ class DocumentClassification:
 
         self.best_model = self.model
         best_loss = float("inf")
-        #best_macro = 0.0
+        best_macro = 0.0
 
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(self.model.parameters(), lr=self.config.lr)
@@ -217,8 +218,8 @@ class DocumentClassification:
 
             if val_metrics[0] < best_loss - 0.001:
                 best_loss = val_metrics[0]
-                best_model = copy.deepcopy(self.model)
                 best_macro = val_metrics[2]
+                best_model = copy.deepcopy(self.model)
                 patience_counter = 0
                 # path = os.path.join(checkpoint_dir, "model_setup_1-2.pth")
                 # torch.save((model.state_dict(), optimizer.state_dict()), path)
@@ -227,6 +228,10 @@ class DocumentClassification:
                 if patience_counter >= self.config.patience:
                     print("Model training was stopped early")
                     break
+
+            if log_results:
+                save_results_in_wandb(train_metrics, val_metrics, best_macro,
+                                      best_loss)
 
         self.best_model = best_model
         print("Finished Training")
